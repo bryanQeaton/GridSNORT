@@ -1,14 +1,14 @@
 #include <chrono>
 #include <iostream>
-#include <bits/stl_deque.h>
 
 #include "perft.h"
 #include "snort.h"
 #include "solver.h"
 
 int main() {
-    auto pos=Snort::Position(7,4);
+    auto pos=Snort::Position(7,5);
     std::cout<<pos<<"\n";
+
     auto t0=std::chrono::high_resolution_clock::now();
 
     std::cout<<solver(pos)<<"\n";

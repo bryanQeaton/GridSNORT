@@ -78,6 +78,13 @@ namespace Snort {
     };
     constexpr uint64_t EAST_BOUND=0xfefefefefefefefe;
     constexpr uint64_t WEST_BOUND=0x7f7f7f7f7f7f7f7f;
+    static uint64_t adjacent(const uint64_t x) {
+        uint64_t o=x>>1&WEST_BOUND;
+        o|=x<<1&EAST_BOUND;
+        o|=x>>8;
+        o|=x<<8;
+        return o&~x;
+    }
     inline void show(const uint64_t x,const int m,const int n) {
         for (int i=0;i<64;i++) {
             if (i%8==0){std::cout<<"\n";}
@@ -205,9 +212,46 @@ namespace Snort {
         [[nodiscard]] uint64_t empty() const{return ~all()&BOARD_MASK[m*8+n];}
         [[nodiscard]] bool turn() const{return stm;}
         [[nodiscard]] uint8_t ply() const {return pl;}
-        // [[nodiscard]] int solve() const {
-        //
-        // }
+        uint64_t legals(const bool side) const {
+            const uint64_t empty_sqrs=empty();
+            uint64_t owned=board[!side]>>1&WEST_BOUND;
+            owned|=board[!side]<<1&EAST_BOUND;
+            owned|=board[!side]>>8;
+            owned|=board[!side]<<8;
+            return empty()&~owned;
+        }
+        [[nodiscard]] int solve() const {
+            const uint64_t us_legals=legals(turn());
+            const uint64_t them_legals=legals(!turn());
+            const uint64_t us_adj=adjacent(us_legals);
+            const uint64_t them_adj=adjacent(them_legals);
+            const uint64_t intersection=(us_adj|us_legals)&(them_adj|them_legals);
+            const int count=__builtin_popcountll(intersection);
+            if (count>2){return 0;}
+            const int us_count=__builtin_popcountll(us_legals);
+            const int them_count=__builtin_popcountll(them_legals);
+            int score=us_count-them_count;
+            if (count==1){score+=1;}
+            else if (count==2) {
+                auto temp=us_legals;
+                bool adj_intesect=false;
+                while (temp) {
+                    const int idx=__builtin_ctzll(temp);
+                    temp&=(temp-1);
+                    if ((adj[idx]&intersection)==intersection) {
+                        //if they're adjacent you can't cover both in one move so the score stays the same
+                        adj_intesect=true;
+                        break;
+                    }
+                }
+                if (!adj_intesect) {
+                    //if theyre not adjacent you can cover both in one move so the score is supplimented
+                    score+=1;
+                }
+            }
+            if (score<=0){return -1;}
+            return 1;
+        }
         friend std::ostream &operator<<(std::ostream &os,const Position &pos) {
             for (int i=0;i<64;i++) {
                 if (i%8==0){os<<"\n";}

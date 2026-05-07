@@ -1,5 +1,7 @@
 #ifndef GRIDSNORT_SOLVER_H
 #define GRIDSNORT_SOLVER_H
+#include <algorithm>
+
 #include "snort.h"
 #include "tt.h"
 
@@ -8,13 +10,19 @@ inline uint64_t nodes=0;
 inline void score_moves(const Snort::Position &pos,Snort::Movelist &moves,const uint64_t &best_move) {
     for (auto move:moves) {
         if (move==best_move){move.set_score(32767);}
-
+        const uint64_t adj=Snort::adj[__builtin_ctzll(move)];
+        const uint64_t them_owned_adj=adj&pos.owned(!pos.turn());
+        move.set_score(move.score()+__builtin_popcountll(adj)-__builtin_popcountll(them_owned_adj));
     }
 }
 
 
 inline int solver(Snort::Position &pos,int alph=-1,const int beta=1) {
     nodes++;
+    const int solve=pos.solve();
+    if (solve!=0) {
+        return solve;
+    }
     const uint64_t hash=pos.hash();
     Entry &entry=tt[hash];
     const int alph_orig=alph;
@@ -31,22 +39,15 @@ inline int solver(Snort::Position &pos,int alph=-1,const int beta=1) {
         return -1;
     }
     score_moves(pos,moves,best_move);
-    uint64_t owned=pos.owned(pos.turn());
-    const uint64_t e=pos.empty();
-    if ((owned|pos.owned(!pos.turn())&e)==e){owned=0;}
+    std::ranges::sort(moves,[](Snort::Movelist::Move &a,Snort::Movelist::Move &b){return a.score()>b.score();});
+    //don't move in your own territory unless thats the only choice
+    const uint64_t legals=pos.legals(pos.turn());
+    const uint64_t owned=pos.owned(pos.turn())&legals;
+    const uint64_t neutral=legals&~owned;
     int value=-1;
     for (int m=0;m<moves.size();m++) {
-        if (moves[m]&owned){continue;}
-        int16_t best=-INFINITY;
-        int best_idx=0;
-        for (int n=m;n<moves.size();n++) {
-            if (m==n){continue;}
-            if (moves[n].score()>best) {
-                best=moves[n].score();
-                best_idx=n;
-            }
-        }
-        std::ranges::swap(moves[m],moves[best_idx]);
+        if (neutral&&(moves[m]&owned)){continue;}
+
         pos.make_move(moves[m]);
         value=std::max(value,-solver(pos,-beta,-alph));
         pos.undo_move(moves[m]);
